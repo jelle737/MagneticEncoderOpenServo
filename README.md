@@ -1,4 +1,4 @@
-# MagnetEncoderOpenServo
+# MagneticEncoderOpenServo
 A programmable servo capable of turning a defined 1 turn 360° (or more)
 
 * A programmable servo, based on ATMEGA328P, TLE5012B, MC34931, using the arduino enviroment
@@ -16,6 +16,7 @@ The software can be reprogrammed to do the following:
 * Be a digital classic servo with a travel of just 90° or 180°.
 * Be programmed as time lapse very slow turning servo since there are 2^15 steps of precision.
 * Be programmed to accept commands instead of a PWM signal, or have different interaction interfaces.
+
 Dificulty of implementing varies on the topic.
 
 Possible drawbacks:
