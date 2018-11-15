@@ -146,6 +146,35 @@ void pulse_control_update(void)
             // Convert the pulse duration to a pulse time.
             //   pulse_position = (pulse_duration/2) - 998;
             pulse_position = pulse_duration + (pulse_duration>>4); //might push back less for slight bigger region
+            /*Warning: TL;DR only interesting if wanting multipe turns beyond 8 turns.
+             * The max value as read in the table above for pulse_duration for a 2300µS pulse is 4633,
+             * At this moment the corner restore upon reboot saving feature is allowed a maximum value of 255 (8bit).
+             * This value is pulse_position/64 -> Thus pulse_position should NEVER exceed 255*64=16320
+             * Example: A ~4turn servo could be created by 
+             * pulse_position = pulse_duration*2;
+             * Giving a max value for a 2300µS of 9266, a safe value
+             * Example: A ~8 turn servo could be created by
+             * pulse_position = pulse_duration*4;
+             * Giving a max value for a 2300µS of 4633*4=18532, this exeeds the 16320 threshold.
+             * The servo will operate as it should, however if will break on reboot in a position above 1980µS, causing windup behaviour possibily causing damage.
+             * A possible solution for this problem. Since A saving resolution of 1/32th a circle isn't needed in a 11 turn servo, the saving devision could be increased.
+             * This devision is however found on many places and not centralised. It is found:
+             * enc.cpp line 50:
+             *  position >>= 6 // >>=6 stands for /64, this number determines the 255*64 limit
+             * enc.cpp line 58:
+             *  uint16_t offset = ((prev_position+16-position)/32)<<11; // 32 is calculated from 2048/64, 16 is half of that
+             * storage.cpp line 61:
+             *  position >>= 6; // same 32
+             *Warning 2:
+             * The maximum recordable position is 2^15 = 32768. Due to the use of signed int16_t in enc.cpp line 58 and line 66, if the position exceeds this value, the servo keeps winding infinitly. 
+             * With an increase in position of 2^11 (2048) for 1 turn this gives max 16 turns
+             * Also in OpenServo.ino line 162 this value is forced converted to singed
+             * This value is then reused in the function pid_position_to_pwm(position);
+             *  In pid.cpp line 152 the function pid_position_to_pwm(int16_t current_position) could be converted to accept the an unsinged value 
+             * And reused in the function pwm_update(position, pwm)
+             *  In pwm.cpp line 283 the function pwm_update(uint16_t position, int16_t pwm), the value is used for sanity checking. It should be updated to accept the unsigned value and wanted range
+             * Also in OpenServo.ino in the main loop at line 164 the if (position >= 0)  { statement should be updated or removed
+             */
             
             // Limit the pulse position. 20% margin on above values for example
             if (pulse_position < MIN_POSITION) pulse_position = MIN_POSITION;

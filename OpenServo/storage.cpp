@@ -62,7 +62,7 @@ void storage_update(uint16_t position){
     if(position < registers_read_word(REG_STOR_HI, REG_STOR_LO)-1 || position > registers_read_word(REG_STOR_HI, REG_STOR_LO)+1 ){
         uint16_t index = registers_read_word(REG_STOR_INDEX_HI, REG_STOR_INDEX_LO);
         eeprom_write_byte(index++, 0);
-        if(index==MAX_INDEX)index=MIN_INDEX;
+        if(index>=MAX_INDEX)index=MIN_INDEX;
         eeprom_write_byte(index, (uint8_t) position);
         registers_write_word(REG_STOR_INDEX_HI, REG_STOR_INDEX_LO, index);
         registers_write_word(REG_STOR_HI, REG_STOR_LO, (uint8_t) position);
