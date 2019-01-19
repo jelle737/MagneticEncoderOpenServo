@@ -25,8 +25,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-bool _recvbit(void);
-
 void swspi_init(void);
 
 void swspi_save(void);

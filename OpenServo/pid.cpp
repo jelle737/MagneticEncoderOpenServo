@@ -1,277 +1,78 @@
-/*
-    Copyright (c) 2006 Michael P. Thompson <mpthompson@gmail.com>
-
-    Permission is hereby granted, free of charge, to any person
-    obtaining a copy of this software and associated documentation
-    files (the "Software"), to deal in the Software without
-    restriction, including without limitation the rights to use, copy,
-    modify, merge, publish, distribute, sublicense, and/or sell copies
-    of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be
-    included in all copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-    NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-    HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-    WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-    DEALINGS IN THE SOFTWARE.
-
-    $Id$
-*/
+/**********************************************************************************************
+ * Arduino PID Library - Version 1.2.1
+ * by Brett Beauregard <br3ttb@gmail.com> brettbeauregard.com
+ *
+ * This Library is licensed under the MIT License
+ **********************************************************************************************/
 
 #include <inttypes.h>
 
-#include "openservo.h"
-#include "config.h"
 #include "pid.h"
-#include "registers.h"
+#include "pwm.h"
+#include "pulsectl.h"
 
-// The minimum and maximum servo position as defined by 10-bit ADC values, only needed for full rotation or inverting output direction
-/*
-#if FULL_ROTATION_ENABLED
-#define MIN_POSITION            (0)
-#if ENCODER_ENABLED
-#if ENCODER_ENABLED_SPI
-#define MAX_POSITION            (32768)
-#else
-#define MAX_POSITION            (4095)
-#endif
-#else
-#define MAX_POSITION            (1023)
-#endif
-#endif*/
+double kp=2.5;        // * (P)roportional Tuning Parameter
+double ki=0.0002;     // * (I)ntegral Tuning Parameter
+double kd=100;        // * (D)erivative Tuning Parameter
 
-#define MIN_POSITION            (1711)
-#define MAX_POSITION            (4710)
+double outputSum, lastInput;
 
-// The minimum and maximum output.
-#define MAX_OUTPUT              (225) //Current limit by limiting these values
-#define MIN_OUTPUT              (-MAX_OUTPUT)
+double outMax = 255;
+double outMin = -outMax;
+bool pOnE = true;
 
-#define PID_PGAIN               0x0500
-#define PID_DGAIN               0x0500 //0x0400
-//#define DEFAULT_PID_IGAIN               0x0000
-//#define DEFAULT_PID_DEADBAND            0xFF
+/* Initialize()****************************************************************
+ *  does all the things that need to happen to ensure a bumpless transfer
+ *  from manual to automatic mode.
+ ******************************************************************************/
 
-// Values preserved across multiple PID iterations.
-//static int16_t previous_seek; //PWM //0.2047..4092.y for x.1000uS..2000uS.y
-static int16_t previous_position; //SPI //0.2048..4096.y for x.0°..360°.y
-/*
-#if FULL_ROTATION_ENABLED
-static int16_t normalize_position_difference(int16_t posdiff)
-{
-    if (posdiff > ((MAX_POSITION - MIN_POSITION) / 2))
-    {
-        posdiff -= (MAX_POSITION - MIN_POSITION);
-    }
-
-    if (posdiff < -((MAX_POSITION - MIN_POSITION) / 2))
-    {
-        posdiff += (MAX_POSITION - MIN_POSITION);
-    }
-
-    return posdiff;
-}
-#endif*/
-
-
-//
-// Digital Lowpass Filter Implementation
-//
-// See: A Simple Software Lowpass Filter Suits Embedded-system Applications
-// http://www.edn.com/article/CA6335310.html
-//
-// k    Bandwidth (Normalized to 1Hz)   Rise Time (samples)
-// 1    0.1197                          3
-// 2    0.0466                          8
-// 3    0.0217                          16
-// 4    0.0104                          34
-// 5    0.0051                          69
-// 6    0.0026                          140
-// 7    0.0012                          280
-// 8    0.0007                          561
-//
-
-/*
-#define FILTER_SHIFT 1
-
-static int32_t filter_reg = 0;
-
-static int16_t filter_update(int16_t input)
-{
-#if 0
-    // Update the filter with the current input.
-#if FULL_ROTATION_ENABLED
-    filter_reg += normalize_position_difference(input - (filter_reg >> FILTER_SHIFT));
-#else
-    filter_reg = filter_reg - (filter_reg >> FILTER_SHIFT) + input;
-#endif
-
-    // Scale output for unity gain.
-    return (int16_t) (filter_reg >> FILTER_SHIFT);
-#else
-    return input;
-#endif
-}*/
-
-void pid_init(void)
-// Initialize the PID algorithm module.
-{
-    // Initialize preserved values.
-    //previous_seek = 0;
-    previous_position = 0;
+void pid_init(int16_t position){
+    outputSum = 0;
+    lastInput = position;
 }
 
+/* Compute() **********************************************************************
+ *     This, as they say, is where the magic happens.  this function should be called
+ *   every time "void loop()" executes.  the function will decide for itself whether a new
+ *   pid Output needs to be computed.  returns true when the output is computed,
+ *   false when nothing has been done.
+ **********************************************************************************/
 
-void pid_registers_defaults(void)
-// Initialize the PID algorithm related register values.  This is done
-// here to keep the PID related code in a single file.
-{
-    // Default deadband.
-/*    registers_write_byte(REG_PID_DEADBAND, DEFAULT_PID_DEADBAND);
+int16_t pid_position_to_pwm(int16_t position){
+    /*Compute all the working error variables*/
+    double input = position;
+    double error = reg_seek_position - input;
+    double dInput = (input - lastInput);
 
-    // Default gain values.
-    registers_write_word(REG_PID_PGAIN_HI, REG_PID_PGAIN_LO, DEFAULT_PID_PGAIN);
-    registers_write_word(REG_PID_DGAIN_HI, REG_PID_DGAIN_LO, DEFAULT_PID_DGAIN);
-    registers_write_word(REG_PID_IGAIN_HI, REG_PID_IGAIN_LO, DEFAULT_PID_IGAIN);
-*/
-    // Default position limits.
-    registers_write_word(REG_MIN_SEEK_HI, REG_MIN_SEEK_LO, DEFAULT_MIN_SEEK);
-    registers_write_word(REG_MAX_SEEK_HI, REG_MAX_SEEK_LO, DEFAULT_MAX_SEEK);
+    //prevent outputSum windup when PID calculation isn't nessesary
+    if(!reg_pwm_pid_enabled){
+        lastInput = input;
+        outputSum = 0;
+        return 0;
+    }
+    outputSum+= (ki * error);
 
-    // Default reverse seek setting.
-    registers_write_byte(REG_REVERSE_SEEK, 0x00);
+    /*Add Proportional on Measurement, if P_ON_M is specified*/
+    if(!pOnE) outputSum-= kp * dInput;
+
+    if(outputSum > outMax) outputSum= outMax;
+    else if(outputSum < outMin) outputSum= outMin;
+
+    /*Add Proportional on Error, if P_ON_E is specified*/
+    double output;
+    if(pOnE) output = kp * error;
+    else output = 0;
+
+    /*Compute Rest of PID Output*/
+    output += outputSum - kd * dInput;
+
+    if(output > outMax) output = outMax;
+    else if(output < outMin) output = outMin;
+
+    /*Remember some variables for next time*/
+    lastInput = input;
+
+    return output;
+
+
 }
-
-
-int16_t pid_position_to_pwm(int16_t current_position) //0-32768 //before 0-1024 SPI -> //0.2048..4096.y for x.0°..360°.y
-// This is a modified pid algorithm by which the seek position and seek
-// velocity are assumed to be a moving target.  The algorithm attempts to
-// output a pwm value that will achieve a predicted position and velocity.
-{
-    // We declare these static to keep them off the stack.
-    static int16_t p_deadband = 0x0002;
-    static int16_t d_deadband = 0x0001;
-    static int16_t p_component;
-    static int16_t d_component;
-    static int16_t seek_position; //PWM
-    static int16_t seek_velocity;
-    static int16_t minimum_position;
-    static int16_t maximum_position;
-    static int16_t current_velocity; //SPI
-    //static int16_t filtered_position; //SPI
-    static int32_t pwm_output;
-    static uint16_t d_gain;
-    static uint16_t p_gain;
-
-    // Filter the current position thru a digital low-pass filter.
-    //filtered_position = filter_update(current_position);
-
-    // Use the filtered position to determine velocity.
-//#if FULL_ROTATION_ENABLED
-//    current_velocity = normalize_position_difference(filtered_position - previous_position);
-//#else
-    //current_velocity = filtered_position - previous_position;
-    current_velocity = current_position - previous_position;
-//#endif
-    //previous_position = filtered_position;
-    previous_position = current_position;
-    
-    // Get the seek position and velocity.
-    seek_position = (int16_t) registers_read_word(REG_SEEK_POSITION_HI, REG_SEEK_POSITION_LO);
-//    seek_velocity = (int16_t) registers_read_word(REG_SEEK_VELOCITY_HI, REG_SEEK_VELOCITY_LO);
-    seek_velocity = 0;
-
-    // Get the minimum and maximum position.
-    minimum_position = MIN_POSITION;//(int16_t) registers_read_word(REG_MIN_SEEK_HI, REG_MIN_SEEK_LO); //DEFAULT_MIN_SEEK 0x0666
-    maximum_position = MAX_POSITION;//(int16_t) registers_read_word(REG_MAX_SEEK_HI, REG_MAX_SEEK_LO); //DEFAULT_MAX_SEEK 0x1196
-
-    // Are we reversing the seek sense?
-   /* if (registers_read_byte(REG_REVERSE_SEEK) != 0)
-    {
-        if needed double check code
-        // Yes. Update the position and velocity using reverse sense.
-        registers_write_word(REG_POSITION_HI, REG_POSITION_LO, (uint16_t) (MAX_POSITION - current_position));
-        registers_write_word(REG_VELOCITY_HI, REG_VELOCITY_LO, (uint16_t) -current_velocity);
-
-        // Reverse sense the seek and other position values.
-        seek_position = MAX_POSITION - seek_position;
-        minimum_position = MAX_POSITION - minimum_position;
-        maximum_position = MAX_POSITION - maximum_position;
-        
-    }
-    else
-    {*/
-        // No. Update the position and velocity registers without change.
-  //      registers_write_word(REG_POSITION_HI, REG_POSITION_LO, (uint16_t) current_position); //NOT USED ANYWHERE
-  //      registers_write_word(REG_VELOCITY_HI, REG_VELOCITY_LO, (uint16_t) current_velocity);
-  //  }
-
-    // Get the deadband.
-    //deadband = (int16_t) registers_read_byte(REG_PID_DEADBAND);
-
-    // Use the filtered position when the seek position is not changing.
-    //if (seek_position == previous_seek) current_position = filtered_position;
-    //previous_seek = seek_position;
-
-    // Keep the seek position bound within the minimum and maximum position.
-    if (seek_position < minimum_position) seek_position = minimum_position; 
-    if (seek_position > maximum_position) seek_position = maximum_position; 
-
-    // The proportional component to the PID is the position error.
-//#if FULL_ROTATION_ENABLED
-//    p_component = normalize_position_difference(seek_position - current_position);
-//#else
-    p_component = seek_position - current_position;
-//#endif
-
-    // The derivative component to the PID is the velocity.
-    d_component = - current_velocity;
-
-    // Get the proportional, derivative and integral gains.
-//    p_gain = registers_read_word(REG_PID_PGAIN_HI, REG_PID_PGAIN_LO);
-//    d_gain = registers_read_word(REG_PID_DGAIN_HI, REG_PID_DGAIN_LO);
-    p_gain = PID_PGAIN;
-    d_gain = PID_DGAIN;
-    // Start with zero PWM output.
-    pwm_output = 0;
-
-    // Apply proportional component to the PWM output if outside the deadband.
-    if ((p_component > p_deadband) || (p_component < -p_deadband))
-    {
-        // Apply the proportional component of the PWM output.
-         //~max 1536 * 2048 = 3145728 (before 1536 * 1024)
-         pwm_output += (int32_t) p_component * (int32_t) p_gain;
-         
-    }
-    if ((d_component > d_deadband) || (d_component < -d_deadband))
-    {
-      pwm_output += (int32_t) d_component * (int32_t) d_gain;
-    }
-    // Apply the derivative component of the PWM output.
-     //~max 12288 (should be smaller?)
-
-    // Shift by 8 to account for the multiply by the 8:8 fixed point gain values.
-    pwm_output >>= 8; 
-
-    // Check for output saturation.
-    if (pwm_output > MAX_OUTPUT)
-    {
-        // Can't go higher than the maximum output value.
-        pwm_output = MAX_OUTPUT;
-    }
-    else if (pwm_output < MIN_OUTPUT)
-    {
-        // Can't go lower than the minimum output value.
-        pwm_output = MIN_OUTPUT;
-    }
-
-    // Return the PID output.
-    return (int16_t) pwm_output;
-}
-

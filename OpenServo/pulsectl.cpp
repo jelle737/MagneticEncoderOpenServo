@@ -28,33 +28,16 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-#include "openservo.h"
-#include "config.h"
-#include "registers.h"
 #include "pulsectl.h"
 #include "pwm.h"
 #include "timer.h"
-
-
-// The minimum and maximum servo position as defined by 10-bit ADC values.
-/*           790	1410    6       5       4       3       2
-            1000	2014    2047    2079    2142    2268    2520
-            1500	3022
-            2000	4030    4092    4256    4282    4534    5037
-            2300	4633    d359.5  d365°   d376°   d398°   d443° 
-            20% margin on the above numbers*/
-#define MIN_POSITION            (1638)
-#define MAX_POSITION            (4502)
-
-// The timer clock prescaler of 8 is selected to yield a 1MHz ADC clock
-// from an 8 MHz system clock.
-#define CSPS        ((0<<CS22) | (1<<CS21) | (0<<CS20))
 
 // Globals used for pulse measurement.
 static volatile uint8_t overflow_count;
 static volatile uint8_t pulse_flag;
 static volatile uint16_t pulse_time;
 static volatile uint16_t pulse_duration;
+uint16_t reg_seek_position;
 
 //
 // Digital Lowpass Filter Implementation
@@ -75,7 +58,7 @@ static volatile uint16_t pulse_duration;
 
 #define FILTER_SHIFT 3
 
-static int32_t filter_reg = 0;
+static int32_t filter_reg;
 
 static int16_t filter_update(int16_t input)
 {
@@ -87,7 +70,7 @@ static int16_t filter_update(int16_t input)
     return (int16_t) (filter_reg >> FILTER_SHIFT);
 }
 
-void pulse_control_init(void)
+void pulse_control_init(int16_t position)
 // Initialize servo pulse control.
 {
     // Initialize the pulse time values.
@@ -114,10 +97,10 @@ void pulse_control_init(void)
     // Configure PB0/PCINT3 as an input.
     DDRB &= ~(1<<DDB0);
     PORTB &= ~(1<<PINB0);
-/*
-    _MISO_DDRx &= ~_MISO_BIT; //ok set false
-    _MISO_PORTx |= _MISO_BIT; //set true enable internal pullup (or turn pin high)*/
-    filter_reg = (int16_t) registers_read_word(REG_SEEK_POSITION_HI, REG_SEEK_POSITION_LO);
+
+    //prevent bump start by initialising the seek_position and lowpass filter with current position
+    reg_seek_position = position;
+    filter_reg = position;
     filter_reg <<= FILTER_SHIFT;
 }
 
@@ -134,18 +117,20 @@ void pulse_control_update(void)
         if ((pulse_duration > 1000) && (pulse_duration < 5000))
         {
             //790uS->1410 1000uS->2014 1500uS->3022 2000uS->4030 2300uS->4633
-            /*
-             790	1410    6       5       4       3       2
-             20%          1635    1661    1711    1812    2013
-            1000	2014    2047    2079    2142    2268    2520
-            1500	3022
-            2000	4030    4092    4256    4282    4534    5037
-             20%          4502    4571    4710    4989    5541
-            2300	4633    d359.5  d365°   d376°   d398°   d443°
-            */
-            // Convert the pulse duration to a pulse time.
-            //   pulse_position = (pulse_duration/2) - 998;
-            pulse_position = pulse_duration + (pulse_duration>>4); //might push back less for slight bigger region
+            /* 
+             *input output
+             *  790	1410    6       5       4       3       2
+             *  20%         1635    1661    1711    1812    2013
+             * 1000	2014    2047    2079    2142    2268    2520
+             * 1500	3022
+             * 2000	4030    4092    4256    4282    4534    5037
+             * 20%          4502    4571    4710    4989    5541
+             * 2300	4633    
+             * matching mov 359.5°  365°    376°    398°    443°
+             */
+             
+             pulse_position = pulse_duration + (pulse_duration>>4); //might push back less for slight bigger region
+             
             /*Warning: TL;DR only interesting if wanting multipe turns beyond 8 turns.
              * The max value as read in the table above for pulse_duration for a 2300µS pulse is 4633,
              * At this moment the corner restore upon reboot saving feature is allowed a maximum value of 255 (8bit).
@@ -159,20 +144,20 @@ void pulse_control_update(void)
              * The servo will operate as it should, however if will break on reboot in a position above 1980µS, causing windup behaviour possibily causing damage.
              * A possible solution for this problem. Since A saving resolution of 1/32th a circle isn't needed in a 11 turn servo, the saving devision could be increased.
              * This devision is however found on many places and not centralised. It is found:
-             * enc.cpp line 50:
+             * enc.cpp line 52:
              *  position >>= 6 // >>=6 stands for /64, this number determines the 255*64 limit
-             * enc.cpp line 58:
+             * enc.cpp line 55:
              *  uint16_t offset = ((prev_position+16-position)/32)<<11; // 32 is calculated from 2048/64, 16 is half of that
-             * storage.cpp line 61:
+             * storage.cpp line 52:
              *  position >>= 6; // same 32
              *Warning 2:
-             * The maximum recordable position is 2^15 = 32768. Due to the use of signed int16_t in enc.cpp line 58 and line 66, if the position exceeds this value, the servo keeps winding infinitly. 
+             * The maximum recordable position is 2^15 = 32768. Due to the use of signed int16_t ofset in enc.cpp line 26, if the position exceeds this value, the servo keeps winding infinitly. 
              * With an increase in position of 2^11 (2048) for 1 turn this gives max 16 turns
-             * Also in OpenServo.ino line 162 this value is forced converted to singed
+             * Also in OpenServo.ino line 38 this value is forced converted to singed
              * This value is then reused in the function pid_position_to_pwm(position);
-             *  In pid.cpp line 152 the function pid_position_to_pwm(int16_t current_position) could be converted to accept the an unsinged value 
+             *  In pid.cpp line 41 the function pid_position_to_pwm(int16_t current_position) could be converted to accept the an unsinged value 
              * And reused in the function pwm_update(position, pwm)
-             *  In pwm.cpp line 283 the function pwm_update(uint16_t position, int16_t pwm), the value is used for sanity checking. It should be updated to accept the unsigned value and wanted range
+             *  In pwm.cpp line 183 the function pwm_update(uint16_t position, int16_t pwm), the value is used for sanity checking. It should be updated to accept the unsigned value and wanted range
              * Also in OpenServo.ino in the main loop at line 164 the if (position >= 0)  { statement should be updated or removed
              */
             
@@ -183,25 +168,10 @@ void pulse_control_update(void)
             // Apply a low pass filter to the pulse position.
             pulse_position = filter_update(pulse_position);
 
-            // Are we reversing the seek sense?
-            //if (registers_read_byte(REG_REVERSE_SEEK) != 0)
-            //{
-                // Yes. Update the seek position using reverse sense.
-            //    registers_write_word(REG_SEEK_POSITION_HI, REG_SEEK_POSITION_LO, (MAX_POSITION - pulse_position));
-            //}
-            //else
-            //{
-                // No. Update the seek position using normal sense.
-                registers_write_word(REG_SEEK_POSITION_HI, REG_SEEK_POSITION_LO, pulse_position);
-            //}
+            reg_seek_position = pulse_position;
 
-            // The seek velocity will always be zero.
-            //registers_write_word(REG_SEEK_VELOCITY_HI, REG_SEEK_VELOCITY_LO, 0);
-
-            // Make sure pwm is enabled.
             pwm_enable();
 
-            // Update the pulse time used as a time stamp.
             pulse_time = timer_get();
         }
 

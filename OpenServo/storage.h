@@ -23,20 +23,7 @@
 void storage_registers_defaults(void);
 void storage_init(void);
 void storage_update(uint16_t position);
-uint16_t storage_read();
-void storage_write(uint16_t position);
-/*#include <stdbool.h>
-#include <stdint.h>
 
-bool _recvbit(void);
-
-void swspi_init(void);
-
-void swspi_save(void);
-
-uint8_t swspi_read(uint16_t addr, void * data);
-
-uint8_t swspi_write(uint16_t addr, const void * data);*/
-
+extern uint16_t reg_stor_value;
 
 #endif

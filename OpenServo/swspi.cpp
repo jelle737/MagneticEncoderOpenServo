@@ -22,7 +22,6 @@
 #include <stdint.h>
 #include <avr/io.h>
 #include "swspi.h"
-//#include <arduino.h>
 
 //Check CRC on transmission enable '1', disable '0'
 #define CRCCHECK 1
@@ -55,13 +54,11 @@
 static void _MOSI_low(void)
 {
     _MOSI_PORTx &= ~_MOSI_BIT;
-    //digitalWrite(11, LOW);
 }
 
 static void _MOSI_high(void)
 {
     _MOSI_PORTx |= _MOSI_BIT;
-    //digitalWrite(11, HIGH);
 }
 
 static bool _MISO_read(void)
@@ -71,66 +68,29 @@ static bool _MISO_read(void)
 
 static void _SCL_low(void){
     _SCL_PORTx &= ~_SCL_BIT;
-    //digitalWrite(13,LOW);
 }
 
 static void _SCL_high(void){
     _SCL_PORTx |= _SCL_BIT;
-   //digitalWrite(13, HIGH);
 }
 
 static void _SS_low(void){
    _SS_PORTx &= ~_SS_BIT;
-   //digitalWrite(6, LOW);
 }
 
 static void _SS_high(void){
     _SS_PORTx |= _SS_BIT;
-    //digitalWrite(6, HIGH);
-
 }
-
-
-/*
-static void _SCL_assert(void)
-{
-    // drive SCL low
-    _SCL_PORTx &= ~_SCL_BIT;
-    _SCL_DDRx |= _SCL_BIT;
-}
-
-
-static void _SCL_deassert(void)
-{
-    // set SCL input
-    _SCL_DDRx &= ~_SCL_BIT;
-    _SCL_PORTx |= _SCL_BIT;
-
-    // wait for SCL to be released by another device (clock
-    // stretching)
-    while (!_SCL_read())
-        ;  // nothing
-}
-
-static bool _SDA_read(void)
-{
-    return _SDA_PINx & _SDA_BIT ? true : false;
-}
-
-*/
-
 
 static void _start(void)
 {
     _SS_low();
 }
 
-
 static void _stop(void)
 {
     _SS_high();
 }
-
 
 static void _sendbit(bool data)
 {
@@ -148,7 +108,6 @@ static void _sendbit(bool data)
     _SCL_low();
 }
 
-
 static bool _recvbit(void)
 {
     _SCL_high();
@@ -157,7 +116,6 @@ static bool _recvbit(void)
 
     return _MISO_read();
 }
-
 
 static void _sendbyte(uint8_t data)
 {
@@ -168,8 +126,6 @@ static void _sendbyte(uint8_t data)
         _sendbit(data & 0x80 ? true : false);
         data <<= 1;
     }
-
-// (was bool)    return !_recvbit();
 }
 
 
@@ -183,32 +139,25 @@ static uint8_t _recvbyte()
         data <<= 1;
         data |= _recvbit() ? 1 : 0;
     }
-
-//    _sendbit(!ack); (bool ack was given)
-
     return data;
 }
-
 
 void swspi_init(void)
 {
     // set SCL output
-    _SCL_DDRx |= _SCL_BIT; //ok set true
+    _SCL_DDRx |= _SCL_BIT;
     _SCL_low();
-    //_SCL_PORTx |= _SCL_BIT; //set high
 
     // set SS output
-    _SS_DDRx |= _SS_BIT; //ok set true
+    _SS_DDRx |= _SS_BIT;
     _SS_high();
-    //_SS_PORTx |= _SS_BIT; //set high
 
     // set MOSI output
-    _MOSI_DDRx |= _MOSI_BIT; //ok set true
+    _MOSI_DDRx |= _MOSI_BIT;
     _MOSI_high();
-    //_MOSI_PORTx |= _MOSI_BIT; //set high
 
     // set MISO input
-    _MISO_DDRx &= ~_MISO_BIT; //ok set false
+    _MISO_DDRx &= ~_MISO_BIT;
     _MISO_PORTx |= _MISO_BIT; //set true enable internal pullup (or turn pin high)
 
 }
@@ -216,17 +165,13 @@ void swspi_init(void)
 #if CRCCHECK
 unsigned char CRC8(unsigned char *message, unsigned char Bytelength)
 {
-    //for(int i=0; i<Bytelength; i++){
-    //  _sendbyte(message[i]);
-    //}
     //“crc” defined as the 8-bits that will be generated through the message till the
     //final crc is generated. In the example above this are the blue lines out of the
     //XOR operation.
     unsigned char crc;
     //“Byteidx” is a counter to compare the bytes used for the CRC calculation
     unsigned char Byteidx, Bitidx;
-    //Initially the CRC remainder has to be set with the original seed (0xFF for the
-    //TLE5012B).
+    //Initially the CRC remainder has to be set with the original seed (0xFF for the TLE5012B).
     crc = 0xFF;
     //For all the bytes of the message.
     for(Byteidx=0; Byteidx<Bytelength; Byteidx++)
@@ -270,14 +215,12 @@ void swspi_save(void)
     
 }
 
-
 uint8_t swspi_read(uint16_t addr, void * data)
 {
     uint16_t * ptr = data;
     uint8_t count = 0;
 
 #if CRCCHECK
-    //uint8_t safety_word[2];
     uint16_t safety_word;
 #endif
     
@@ -345,17 +288,6 @@ uint8_t swspi_read(uint16_t addr, void * data)
     _stop();
     
 #if CRCCHECK
-   // uint8_t *ptr3 = (uint8_t*)&message;
-    //_sendbyte((uint8_t) message[0]);
-    //_sendbyte((uint8_t) message[1]);
-    //_sendbyte((uint8_t) message[2]);
-    //_sendbyte((uint8_t) message[3]);    
-//    return ((uint8_t)(safety_word&0x00ff) == CRC8(message, 4));
-    //_sendbyte(safety_word>>8);
-    //_sendbyte( CRC8(message, 4));
-    //if((safety_word&0x00ff) == CRC8(message, 4)){
-    //  _sendbyte(0xF4);
-    //}
     return ((safety_word&0x00ff) == CRC8(message, 4));
 #else
     return true;

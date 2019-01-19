@@ -25,10 +25,15 @@
 */
 
 #ifndef _OS_PULSECTL_H_
-#define _OS_PULSECTL_H_ 1
+#define _OS_PULSECTL_H_
 
-void pulse_control_init(void);
+#define MIN_POSITION            1711
+#define MAX_POSITION            4710
+
+void pulse_control_init(int16_t position);
 void pulse_control_update(void);
 bool pulse_control_flag(void);
+
+extern uint16_t reg_seek_position;
 
 #endif // _OS_PULSECTL_H_

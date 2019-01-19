@@ -17,20 +17,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-//max value = MAX_POSITION            (4710)
-
 #include <inttypes.h>
-//#include <string.h>
-//#include <avr/io.h>
 #include <avr/eeprom.h>
-
-//#include "openservo.h"
-//#include "config.h"
-//#include "eeprom.h"
-#include "registers.h"
 
 #define MIN_INDEX 0x100
 #define MAX_INDEX 0x200
+uint16_t index;
+uint16_t reg_stor_value;
 
 void storage_registers_defaults(void){
     //initialize all registers
@@ -39,44 +32,26 @@ void storage_registers_defaults(void){
             eeprom_update_byte(i, 0);
         }
     }
-    //write current value to first/a register
+    //write good first value to register, should only happen once in lifetime of servo
     eeprom_write_byte(MIN_INDEX, 32);
 }
 
 void storage_init(void){
-    uint16_t index = MIN_INDEX;
+    index = MIN_INDEX;
     //find index find first non empty value
     while(eeprom_read_byte(index)==0){
         index++;
     }
-
-    //uint8_t position = EEPROM.read(index);
-    registers_write_word(REG_STOR_INDEX_HI, REG_STOR_INDEX_LO, index);
-    registers_write_word(REG_STOR_HI, REG_STOR_LO, eeprom_read_byte(index));
+    
+    reg_stor_value = eeprom_read_byte(index);
 }
-
-//push back uint16_t position 6 times
 
 void storage_update(uint16_t position){
     position >>= 6;
-    if(position < registers_read_word(REG_STOR_HI, REG_STOR_LO)-1 || position > registers_read_word(REG_STOR_HI, REG_STOR_LO)+1 ){
-        uint16_t index = registers_read_word(REG_STOR_INDEX_HI, REG_STOR_INDEX_LO);
+    if(position < reg_stor_value-1 || position > reg_stor_value+1 ){
         eeprom_write_byte(index++, 0);
         if(index>=MAX_INDEX)index=MIN_INDEX;
         eeprom_write_byte(index, (uint8_t) position);
-        registers_write_word(REG_STOR_INDEX_HI, REG_STOR_INDEX_LO, index);
-        registers_write_word(REG_STOR_HI, REG_STOR_LO, (uint8_t) position);
+        reg_stor_value = position;
     }
-}
-
-/*uint16_t storage_read(void){
-    //read value on index
-    registers_read_word(REG_STOR_HI, REG_STOR_LO);
-}*/
-
-void storage_write(uint16_t position){
-    //clear current value
-
-    //write new value
-    registers_write_word(REG_STOR_HI, REG_STOR_LO, position);
 }
