@@ -1,8 +1,13 @@
 # MagneticEncoderOpenServo
 A programmable servo capable of turning a defined 1 turn 360° (or more)
 
-* A programmable servo, based on ATMEGA328P, TLE5012B, MC34931, using the arduino enviroment
+Video on youtube:
+[![1 turn 360° servo](http://img.youtube.com/vi/oHWwntjVp9A/0.jpg)](http://www.youtube.com/watch?v=oHWwntjVp9A "1 turn 360° servo")
+
+* A programmable servo, based on ATMEGA328P, TLE5012B, MC34931 or DRV8837, using the arduino enviroment
 * It's a defined travel servo, capable of going beyond the limits that a potentiometer has, without adding extra gears. It uses a magnet encoder to read it's position instead of a potentiometer.
+
+More information and images are to be found [on this rc groups thread](https://www.rcgroups.com/forums/showthread.php?3154439-1-turn-360%C2%B0-servo "1 turn 360° servo").
 
 ## Software
 
@@ -34,7 +39,7 @@ Possible improvements:
 The required parts next the pcb's and it's components are:
 * A donor servo for it's housing, gears, motor and shaft of the potentiometer.
 * A Diametrically Magnetised round magnet, hard to find can possibly be substitued by a cube magnet.
-* Basic components of the hardware pcb are: ATMEGA328P, TLE5012B, MC34931
+* Basic components of the hardware pcb are: ATMEGA328P, TLE5012B, MC34931 or DRV8837
 
 ## Open Source
 

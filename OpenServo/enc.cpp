@@ -59,6 +59,6 @@ uint16_t enc_get_position_value(void) // (Revol+1)*2048+angle/16 -> 0.2048..4096
 {
     struct serial_interface_unit_s siu;
     uint16_t ret = offset;
-    ret += _reg_read_serial_interface_unit(&siu) ? (((siu.revol)<<11)|((siu.angle>>4)&0x1fff)) : 0xFFFF;
+    ret += _reg_read_serial_interface_unit(&siu) ? (((siu.revol)<<11)|((siu.angle>>4)&0x1fff)) : 0xFFFF-ret;
     return ret;
 }
