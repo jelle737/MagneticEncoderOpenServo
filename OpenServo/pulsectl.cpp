@@ -56,7 +56,7 @@ uint16_t reg_seek_position;
 // 8    0.0007                          561
 //
 
-#define FILTER_SHIFT 3
+#define FILTER_SHIFT 2
 
 static int32_t filter_reg;
 

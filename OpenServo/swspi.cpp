@@ -104,7 +104,7 @@ static void _sendbit(bool data)
     {
         _MOSI_low();
     }
-
+    asm("nop\n");
     _SCL_low();
 }
 
